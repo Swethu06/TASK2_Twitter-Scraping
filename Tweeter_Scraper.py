@@ -72,7 +72,7 @@ with st.form(key='Twitter_form'):
                             # if the object is not serialized by default json code)
                             # json.dump() method can't serialize the datetime object by default.
                             user_json = json.dumps(user_dict, default=json_serial)
-                            tweets.append([tweet.url, tweet_date_iso, tweet.id, tweet.content, user_json,
+                            tweets.append([query,tweet.url, tweet_date_iso, tweet.id, tweet.content, user_json,
                                            tweet.replyCount, tweet.retweetCount, tweet.likeCount,
                                            tweet.lang, tweet.source, tweet.conversationId])
         return tweets
@@ -83,7 +83,7 @@ with st.form(key='Twitter_form'):
         st.success('Submitted successfully!!!!!!')
         tweets = get_tweets()
         if tweets:
-            df = pd.DataFrame(tweets, columns=['URL', 'DATE', 'ID', 'CONTENT', 'USER',
+            df = pd.DataFrame(tweets, columns=['KEY WORD','URL', 'DATE', 'ID', 'CONTENT', 'USER',
                                                'REPLY COUNT', 'RETWEET COUNT', 'LIKE COUNT',
                                                'LANGUANGE', 'SOURCE', 'CONVERSATION ID'])
             st.dataframe(df)
@@ -96,7 +96,13 @@ with st.form(key='Twitter_form'):
                 client = MongoClient()
                 db = client["twitter_db"]
                 collection = db["twitter_data"]
-                collection.insert_many(df.to_dict("records"))
+                # Convert the dataframe to a list of dictionaries
+                tweets_dict=df.to_dict('records')
+                for tweet in tweets_dict:
+                    if collection.find_one({"ID": tweet["ID"]}):
+                        pass
+                    else:
+                        collection.insert_one(tweet) 
                 st.success('Saved Successfully into Mongo DB!!!!!!')
 
             select_option1 = st.radio("Choose the desired format to be downloaded ", ('','CSV', 'JSON'))
@@ -127,28 +133,3 @@ with st.form(key='Twitter_form'):
                             st.markdown("```")
         else:
             st.warning("Scrape the data before downloading")
-    # if submit_button:
-    #     session_state.counter += 1
-    #     st.success('Submitted successfully!!!!!!')
-    #     tweets = get_tweets()
-    #     if tweets:
-    #         df = pd.DataFrame(tweets, columns=['URL', 'DATE', 'ID', 'CONTENT', 'USER',
-    #                                            'REPLY COUNT', 'RETWEET COUNT', 'LIKE COUNT',
-    #                                            'LANGUANGE', 'SOURCE', 'CONVERSATION ID'])
-    #         # Store the data in MongoDB
-    #         client = MongoClient()
-    #         db = client.twitter_db
-    #         tweets_dict = df.to_dict('records')
-    #         # Show scraped tweets in dataframe
-    #         if st.checkbox('Show Data'):
-    #             st.dataframe(df)
-    #             st.success("Displays the scrapped tweet based on the given input criteria")
-    #         if st.checkbox('Save Data'):
-    #             db.tweets.insert_many(tweets_dict)
-    #             st.success("Scraped tweets has been stored in MongoDB")
-    #         # Download data in csv and json format
-    #         if st.checkbox('Download'):
-    #             csv = df.to_csv()
-    #             json = df.to_json()
-    #             st.write("Download as CSV : ", st.link('Download', csv))
-    #             st.write("Download as JSON : ", st.link('Download', json))
