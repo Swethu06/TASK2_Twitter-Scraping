@@ -2,134 +2,115 @@ import snscrape.modules.twitter as sntwitter
 import pandas as pd
 import streamlit as st
 from pymongo import MongoClient
-import json
-from datetime import datetime
+from datetime import datetime as dt
 import pytz
-from streamlit import session_state
+import json
 
-with st.form(key='Twitter_form'):
-    st.title("Twitter Scrapper")
-    query=st.text_input("Enter the Keyword or Hashtag to be searched :", value="")
-    query = query.strip()
-    date_range = st.selectbox("Choose the date range :",["Last hour","Last day","Last week","Last month","Last 100 days","Last year"])
-    limit=st.slider("Choose the limit to be searched :",1,10000,step=30)
-    submit_button=st.form_submit_button(label='SUBMIT')
+#with st.form(key='Twitter_form'):
+st.title("Twitter Scrapper")
+query=st.text_input("Enter the Keyword or Hashtag to be searched :", value="")
+query = query.strip()
+limit = st.slider("Choose the limit to be searched :", 1, 10000, step=10)
+start_date=st.date_input('Start date',dt.today().date())
+end_date = st.date_input('End date', dt.today().date())
+#connection to mongo DB
+client = MongoClient("mongodb+srv://Swetha:swetha06@cluster0.dbuhby6.mongodb.net/test")
+db = client["twitter_db"]
+collection = db["twitter_data"]
+
+if start_date  <= end_date:
+    if end_date <= dt.today().date():
+        pass
+    else:
+        st.error("End date should be on or before today's date")
+else:
+    st.error("End date should be on or after start date")
+
+def json_serial(obj):
+# check if the passed object(not serializable by default json code) obj is an instance of the datetime class.
+    if isinstance(obj, (dt)):
+        return obj.isoformat()
+    if isinstance(obj, sntwitter.TextLink):
+        return obj.url
+    if isinstance(obj, sntwitter.UserLabel):
+        return obj.user_label
+    raise TypeError("Type %s not serializable" % type(obj))
+
+
+def get_tweets():
     tweets = []
+    # access to the Olson time zone database
+    timezone = pytz.timezone("UTC")  # Coordinated Universal Time (UTC) time zone.
+    # Get the items based on the input
+    if query.strip() == "":
+        st.error("Please enter a valid keyword or hashtag")
+        return
+    for tweet in sntwitter.TwitterSearchScraper(query).get_items():
+        if len(tweets) == limit:
+            break
+        else:
+            # __dict__access the attributes of the user object as a dictionary
+            user_dict = tweet.user.__dict__
+            #set the time zone of the tweet.date to UTC to ensure the datetime object is in a standardized format
+            tweet_date = tweet.date.replace(tzinfo=timezone)
+            #update_date=diff_date.replace(tzinfo=timezone)
+            if start_date <= tweet_date.date()<=end_date:
+                tweet_date_iso = tweet_date.isoformat()
+            # convert the user_dict object into a JSON formatted string and calls the JSON serial function
+            # if the object is not serialized by default json code,json.dump() method can't serialize the datetime object by default.
+            user_json = json.dumps(user_dict, default=json_serial)
+            tweets.append([query,tweet.url, tweet_date_iso, tweet.id, tweet.content, user_json,
+                           tweet.replyCount, tweet.retweetCount, tweet.likeCount,
+                           tweet.lang, tweet.source, tweet.conversationId])
+    return tweets
 
-    session_state.counter = session_state.get("counter", 0)
+c=0
+submit_button=st.button('SUBMIT')
+if st.session_state.get('button') != True:
+    st.session_state['button'] = submit_button
 
-
-    def json_serial(obj):
-        # check if the passed object(not serializable by default json code) obj is an instance of the datetime class.
-        if isinstance(obj, (datetime)):
-            return obj.isoformat()
-        if isinstance(obj, sntwitter.TextLink):
-            return obj.url
-        if isinstance(obj, sntwitter.UserLabel):
-            return obj.user_label
-        raise TypeError("Type %s not serializable" % type(obj))
-
-
-    # Function to convert the date range string to seconds
-    def get_seconds(date_range):
-        if date_range == "Last hour":
-            return 3600
-        elif date_range == "Last day":
-            return 86400
-        elif date_range == "Last week":
-            return 604800
-        elif date_range == "Last month":
-            return 2592000
-        elif date_range == "Last 100 days":
-            return 8640000
-        elif date_range == "Last year":
-            return 31536000
-
-
-    def get_tweets():
-        tweets = []
-        seconds = get_seconds(date_range)
-        timezone = pytz.timezone("UTC")
-        # Get the items based on the input
-        if query.strip() == "":
-            st.error("Please enter a valid keyword or hashtag")
-            return
-        for tweet in sntwitter.TwitterSearchScraper(query).get_items():
-            if len(tweets) == limit:
-                break
-            else:
-                # __dict__access the attributes of the user object as a dictionary
-                user_dict = tweet.user.__dict__
-                tweet_date = tweet.date.replace(tzinfo=timezone)
-                current_time = datetime.now().replace(tzinfo=timezone)
-                if current_time and tweet_date:
-                    diff_time = current_time - tweet_date
-                    if diff_time:
-                        if (current_time - tweet_date).total_seconds() <= seconds:
-                            tweet_date_iso = tweet_date.isoformat()
-
-                            # convert the user_dict object into a JSON formatted string and calls the JSON serial function
-                            # if the object is not serialized by default json code)
-                            # json.dump() method can't serialize the datetime object by default.
-                            user_json = json.dumps(user_dict, default=json_serial)
-                            tweets.append([query,tweet.url, tweet_date_iso, tweet.id, tweet.content, user_json,
-                                           tweet.replyCount, tweet.retweetCount, tweet.likeCount,
-                                           tweet.lang, tweet.source, tweet.conversationId])
-        return tweets
-
-
-    if submit_button:
-        session_state.counter += 1
+if st.session_state['button'] == True:
+    c = c + 1
+    tweets = get_tweets()
+    if tweets is not None:
         st.success('Submitted successfully!!!!!!')
-        tweets = get_tweets()
-        if tweets:
-            df = pd.DataFrame(tweets, columns=['KEY WORD','URL', 'DATE', 'ID', 'CONTENT', 'USER',
-                                               'REPLY COUNT', 'RETWEET COUNT', 'LIKE COUNT',
-                                               'LANGUANGE', 'SOURCE', 'CONVERSATION ID'])
-            st.dataframe(df)
-            st.success('Scrapped Data Retrieved Successfully !!!!!!')
+        df = pd.DataFrame(tweets, columns=['KEY WORD', 'URL', 'DATE', 'ID', 'CONTENT', 'USER',
+                                           'REPLY COUNT', 'RETWEET COUNT', 'LIKE COUNT',
+                                           'LANGUANGE', 'SOURCE', 'CONVERSATION ID'])
 
-            if st.checkbox("Save Data"):
-              if session_state.counter >= 1:
-                st.write("Saving...")
+        col1,col6 = st.columns([1,1])
+        with col1:
+            if st.button('View Data') and c>=1:
+                st.dataframe(df)
+                st.success('Scrapped Data Retrieved Successfully !!!!!!')
+
+        with col6:
+            if st.button('SAVE'):
+                st.write('saving...')
+                # converts the DataFrame to a list of dictionaries
+                tweets_dict = df.to_dict('records')
                 # Store the data in MongoDB
-                client = MongoClient()
-                db = client["twitter_db"]
-                collection = db["twitter_data"]
-                # Convert the dataframe to a list of dictionaries
-                tweets_dict=df.to_dict('records')
                 for tweet in tweets_dict:
-                    if collection.find_one({"ID": tweet["ID"]}):
-                        pass
+                    if collection.find_one({"ID": tweet["ID"]}) is None:
+                        collection.insert_one(tweet)
                     else:
-                        collection.insert_one(tweet) 
+                        collection.update_one({'ID': tweet['ID']}, {"$set": tweet}, upsert=False)
                 st.success('Saved Successfully into Mongo DB!!!!!!')
 
-            select_option1 = st.radio("Choose the desired format to be downloaded ", ('','CSV', 'JSON'))
-                # if st.write("Download the scrapped data", st.radio("Download")):
-            if select_option1 == 'CSV':
-                        # if st.button("Download as CSV format"):
-                        current_time = datetime.now().strftime("%Y_%m_%d")
-                        file_name = query + '_' + current_time + '.csv'
-                        save_path = st.text_input("Enter the path to save the file:", type="csv")
-                        if save_path:
-                            full_path = save_path + "/" + file_name
-                            df.to_csv(full_path,index=False)
-                            st.success('Data downloaded successfully in csv format!!!!!!')
-                            st.markdown("```")
-                            st.write(csv)
-                            st.markdown("```")
-            elif select_option1 == 'JSON':
-                        # if st.button("Download as JSON format"):
-                        current_time = datetime.now().strftime("%Y-%m-%d")
-                        file_name = query + "_" + current_time + ".json"
-                        save_path = st.file_uploader("Select a location to save the file", type="json")
-                        if save_path:
-                            full_path = save_path + "/" + file_name
-                            df.to_json(full_path)
-                            st.success('Data downloaded successfully in json format!!!!!!')
-                            st.markdown("```")
-                            st.write(json)
-                            st.markdown("```")
-        else:
-            st.warning("Scrape the data before downloading")
+        col1,col6 = st.columns([1,1])
+        with col1:
+            # Download as CSV format
+            if st.button('Download in CSV'):
+                current_date = dt.now().strftime("%Y_%m_%d")
+                file_name = query + '_' + str(dt.today().date())  + '.csv'
+                df.to_csv(file_name, index=False)
+                st.success('Data downloaded successfully in json format!!!!!!')
+
+        with col6:
+            # Download as JSON format
+            if st.button('Download in JSON'):
+                current_date = dt.now().strftime("%Y_%m_%d")
+                file_name = query + '_' + str(dt.today().date())  + '.json'
+                df.to_json(file_name, orient='index')
+                st.success('Data downloaded successfully in json format!!!!!!')
+
