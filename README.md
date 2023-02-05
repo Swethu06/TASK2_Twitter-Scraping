@@ -1,5 +1,5 @@
 # TASK2_Twitter-Scraping
-Tweeter Scraping using snscrape
+Tweeter Scraping using snscrape and streamlit
 
 Code involves the following mechanism
 1)The desired data has been scrapped based on the keyword,selected data range as well as the number of records to be scraped using snscrape.
