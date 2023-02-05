@@ -104,7 +104,7 @@ if st.session_state['button'] == True:
                 current_date = dt.now().strftime("%Y_%m_%d")
                 file_name = query + '_' + str(dt.today().date())  + '.csv'
                 df.to_csv(file_name, index=False)
-                st.success('Data downloaded successfully in json format!!!!!!')
+                st.success('Data downloaded successfully in csv format!!!!!!')
 
         with col6:
             # Download as JSON format
